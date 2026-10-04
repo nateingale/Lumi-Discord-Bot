@@ -1,10 +1,13 @@
 import os
 
 import discord
+from openai import OpenAI
 from dotenv import load_dotenv
 
 
 load_dotenv()
+
+openai_client = OpenAI()
 
 token = os.getenv("DISCORD_TOKEN")
 if not token:
