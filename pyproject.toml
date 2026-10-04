@@ -7,4 +7,5 @@ dependencies = [
     "discord-py>=2.4,<3.0",
     "openai>=1.66.0",
     "python-dotenv>=1.0,<2.0",
+    "supabase>=2.0.0",
 ]

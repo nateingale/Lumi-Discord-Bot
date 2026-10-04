@@ -1,0 +1,1 @@
+- [Lumi Discord bot constraints](lumi-discord-bot.md) — Preserve its established behavior and short-term history; use only the configured Supabase environment variables and never expose secrets.
