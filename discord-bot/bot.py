@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import json
 import logging
 import os
@@ -26,6 +28,14 @@ if not token:
     )
 
 MODEL = "gpt-6-luna"
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gpt-image-1")
+
+IMAGE_GENERATION_ENABLED = (
+    os.getenv("IMAGE_GENERATION_ENABLED", "false").lower() == "true"
+)
+
+image_last_attempt: dict[int, float] = {}
+image_generation_lock = asyncio.Lock()
 MAX_OUTPUT_TOKENS = 450
 MAX_HISTORY_MESSAGES = 12
 MAX_MEMORY_CONTEXT = 8
