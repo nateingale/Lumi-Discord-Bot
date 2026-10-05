@@ -1013,8 +1013,21 @@ async def on_message(message: discord.Message) -> None:
         else:
             user_text = "The user mentioned you without adding any text."
 
-    if bot_author:
+        if bot_author:
         user_text = bot_prompt_text(message, user_text)
+    else:
+        display_name = (
+            getattr(message.author, "display_name", None)
+            or message.author.name
+        )
+        user_text = (
+            "[CURRENT DISCORD SPEAKER]\n"
+            f"Display name: {display_name}\n"
+            "This identifies the current speaker for this conversation only. "
+            "Do not assume this person is Nate unless the available memory or "
+            "conversation context establishes that.\n\n"
+            f"USER MESSAGE:\n{user_text}"
+        )
 
     scope_context = memory_access_context(message, bot_author=bot_author)
     history_key = conversation_key_for(message)
