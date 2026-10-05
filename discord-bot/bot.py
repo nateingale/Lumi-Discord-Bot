@@ -823,7 +823,21 @@ async def remember_user_message(
     except Exception as error:
         logger.warning("Long-term memory processing failed (%s)", type(error).__name__)
 
+        if not bot_author and message.content.strip():
+            await remember_user_message(
+                raw_user_text,
+                memories,
+                lessons,
+                scope_context,
+            )
 
+            await asyncio.to_thread(
+                write_journal_sync,
+                message,
+                raw_user_text,
+                answer,
+                journal_rows,
+            )
 def split_discord_message(text: str, limit: int = 2000) -> list[str]:
     remaining = text.strip()
     chunks: list[str] = []
@@ -1416,17 +1430,13 @@ async def on_message(message: discord.Message) -> None:
 
         recalled_context = ""
 
-        if not bot_author:
-            archived_history, recalled_context = (
-                await asyncio.to_thread(
-                    read_conversation_sync,
-                    message,
-                    raw_user_text,
-                )
+        if not bot_author and message.content.strip():
+            await remember_user_message(
+                raw_user_text,
+                memories,
+                lessons,
+                scope_context,
             )
-
-            if not history and archived_history is not None:
-                history[:] = archived_history
 
         request_history = (
             history
