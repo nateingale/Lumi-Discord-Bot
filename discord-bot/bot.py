@@ -1012,7 +1012,7 @@ async def on_message(message: discord.Message) -> None:
             user_text = "(The allowlisted bot mentioned or replied to Lumi without text.)"
         else:
             user_text = "The user mentioned you without adding any text."
-
+        raw_user_text = user_text
         if bot_author:
         user_text = bot_prompt_text(message, user_text)
     else:
@@ -1102,8 +1102,8 @@ async def on_message(message: discord.Message) -> None:
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    if not bot_author:
-        await remember_user_message(user_text, memories, lessons, scope_context)
+        if not bot_author:
+            await remember_user_message(raw_user_text, answer, scope_context)
 
 if __name__ == "__main__":
     client.run(token)
