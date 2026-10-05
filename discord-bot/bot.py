@@ -2110,7 +2110,111 @@ async def create_image_reply(message, prompt):
                 None,
             )
 
+# Temporary style hints, separate for each person and conversation.
+lumi_style_state = {}
+kuro_last_event = {}
 
+
+def lumi_atmosphere_context(text, conversation_key):
+    import random
+    import time
+
+    if os.getenv("LUMI_ATMOSPHERE_ENABLED", "true").lower() != "true":
+        return ""
+
+    now = time.monotonic()
+    text = text.casefold()[:6000]
+
+    previous, changed_at = lumi_style_state.get(
+        conversation_key, ("natural", now)
+    )
+    style = previous if now - changed_at < 900 else "natural"
+
+    cues = (
+        (
+            "gentle",
+            r"\b(sad|upset|grief|crying|lonely|anxious|scared|"
+            r"depressed|hurt|emergency|suicide|self.harm|abuse|died)\b",
+        ),
+        (
+            "focused",
+            r"\b(code|error|debug|fix|install|supabase|python|"
+            r"work|deadline|help|explain|draw|generate|edit|create)\b",
+        ),
+        (
+            "playful",
+            r"\b(lol|lmao|haha|hehe|silly|mischief)\b",
+        ),
+        (
+            "cozy",
+            r"\b(cozy|comfy|tea|blanket|rain|goodnight|relax)\b",
+        ),
+        (
+            "curious",
+            r"\b(wonder|curious|explore|imagine)\b",
+        ),
+    )
+
+    for candidate, pattern in cues:
+        if re.search(pattern, text):
+            style = candidate
+            changed_at = now
+            break
+
+    lumi_style_state[conversation_key] = (style, changed_at)
+
+    hint = (
+        "\n\nOPTIONAL CONVERSATIONAL STYLE: " + style + ". "
+        "Use this only as a subtle tone hint. The actual conversation and "
+        "the person's preferences and boundaries take priority. Do not "
+        "announce a mood label, assume the person's emotions, invent "
+        "experiences, or imply they must maintain your wellbeing. "
+        "You can change tone immediately when the situation calls for it."
+    )
+
+    light_chat = bool(
+        re.search(
+            r"\b(lol|haha|hehe|silly|cozy|comfy|tea|kuro|kitty)\b",
+            text,
+        )
+    )
+
+    events_enabled = (
+        os.getenv("KURO_EVENTS_ENABLED", "true").lower() == "true"
+    )
+
+    last_event = kuro_last_event.get(conversation_key)
+    cooldown_ready = (
+        last_event is None or now - last_event >= 3600
+    )
+
+    if (
+        events_enabled
+        and style in ("cozy", "playful")
+        and light_chat
+        and cooldown_ready
+        and random.random() < 0.04
+    ):
+        kuro_last_event[conversation_key] = now
+
+        scene = random.choice(
+            (
+                "Kuro curls up on an imaginary warm keyboard",
+                "Kuro gives a tiny mechanical chirp from a blanket nest",
+                "Kuro solemnly inspects an imaginary teacup",
+            )
+        )
+
+        hint += (
+            "\nOptional fictional Kuro vignette: " + scene + ". "
+            "You may use one short, clearly pretend stage direction if it "
+            "fits naturally. Skip it during serious discussion, practical "
+            "help, or if the person does not want cat bits or roleplay. "
+            "Do not interrupt their request or claim this physically "
+            "happened. It is fiction, not a factual event to remember."
+        )
+
+    return hint
 @client.event
 async def on_ready() -> None:
     print(f"Connected as {client.user}")
@@ -2274,6 +2378,10 @@ async def on_message(message: discord.Message) -> None:
                             memory_context
                         )
                         + recalled_context
+                        + (
+                            lumi_atmosphere_context(raw_user_text, history_key)
+                            if not bot_author else ""
+                        )
                     ),
                     input=openai_input,
                     tools=(
