@@ -1014,11 +1014,11 @@ async def on_message(message: discord.Message) -> None:
             user_text = "The user mentioned you without adding any text."
         raw_user_text = user_text
         if bot_author:
-        user_text = bot_prompt_text(message, user_text)
-    else:
-        display_name = (
-            getattr(message.author, "display_name", None)
-            or message.author.name
+            user_text = bot_prompt_text(message, user_text)
+        else:
+            display_name = (
+                getattr(message.author, "display_name", None)
+                or message.author.name
         )
         user_text = (
             "[CURRENT DISCORD SPEAKER]\n"
