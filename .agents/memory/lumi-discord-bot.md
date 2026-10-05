@@ -11,6 +11,8 @@ For long-term memory, keep `lumi`, `personal`, `server`, and `global` as separat
 
 Short-term conversation history must be isolated by Discord user in both DMs and shared server channels while preserving Lumi's 12-message history.
 
-**Why:** the user explicitly requires multi-user privacy without replacing Lumi's existing memory system; guild-wide retrieval has no per-channel permission boundary.
+For image vision, accept only validated, bounded Discord image attachments. Send their URLs only in the live OpenAI request; never retain attachment URLs or image bytes in short-term history or Supabase memory. Keep durable image-derived facts subject to the existing selective memory and scope rules.
 
-**How to apply:** Filter database rows by scope and exact identity before sending any content to OpenAI. Keep IDs out of prompts and model-controlled output. Verify with local mocks or dummy settings, preserve Lumi's existing behavior, and check that logs do not expose secret values.
+**Why:** the user explicitly requires multi-user privacy without replacing Lumi's existing memory system; guild-wide retrieval has no per-channel permission boundary, and image attachments must not become a stored archive.
+
+**How to apply:** Filter database rows by scope and exact identity before sending any content to OpenAI. Keep IDs out of prompts and model-controlled output. Keep image URLs/data out of stored history and memory. Verify with local mocks or dummy settings, preserve Lumi's existing behavior, and check that logs do not expose secret values.

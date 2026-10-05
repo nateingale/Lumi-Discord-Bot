@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
+from urllib.parse import urlsplit
 
 import discord
 from dotenv import load_dotenv
@@ -32,7 +33,16 @@ MAX_LESSON_CONTEXT = 4
 MEMORY_CANDIDATE_LIMIT = 36
 LESSON_CANDIDATE_LIMIT = 24
 MAX_SEARCH_TERMS = 6
+MAX_IMAGE_ATTACHMENTS = 4
+MAX_IMAGE_SIZE_BYTES = 20 * 1024 * 1024
 MEMORY_SCOPES = ("lumi", "personal", "server", "global")
+SUPPORTED_IMAGE_MIME_TYPES = {
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg", "image/jpg"},
+    ".jpeg": {"image/jpeg", "image/jpg"},
+    ".webp": {"image/webp"},
+}
+# GIF is intentionally omitted so animated or decoder-dependent content is skipped.
 
 MEMORY_KINDS = (
     "observation",
@@ -794,6 +804,77 @@ def split_discord_message(text: str, limit: int = 2000) -> list[str]:
     return chunks
 
 
+def validated_discord_image_url(attachment: discord.Attachment) -> str | None:
+    try:
+        filename = os.path.basename(str(attachment.filename or ""))
+        extension = os.path.splitext(filename)[1].lower()
+        content_type = str(attachment.content_type or "")
+        content_type = content_type.split(";", 1)[0].strip().lower()
+        size = attachment.size
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if content_type not in SUPPORTED_IMAGE_MIME_TYPES.get(extension, set()):
+        return None
+    if isinstance(size, bool) or not isinstance(size, int):
+        return None
+    if size <= 0 or size > MAX_IMAGE_SIZE_BYTES:
+        return None
+
+    try:
+        url = urlsplit(str(attachment.url or ""))
+        hostname = url.hostname
+        port = url.port
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+    if (
+        url.scheme != "https"
+        or hostname != "cdn.discordapp.com"
+        or port not in (None, 443)
+        or url.username is not None
+        or url.password is not None
+        or not url.path.startswith("/attachments/")
+    ):
+        return None
+    return url.geturl()
+
+
+def supported_image_urls(
+    attachments: list[discord.Attachment],
+) -> list[str]:
+    image_urls: list[str] = []
+    for attachment in attachments:
+        image_url = validated_discord_image_url(attachment)
+        if image_url is None:
+            continue
+        image_urls.append(image_url)
+        if len(image_urls) == MAX_IMAGE_ATTACHMENTS:
+            break
+    return image_urls
+
+
+def build_openai_input(
+    request_history: list[dict[str, str]],
+    image_urls: list[str],
+) -> list[dict[str, Any]]:
+    if not request_history or not image_urls:
+        return request_history
+
+    current_message = request_history[-1]
+    current_content: list[dict[str, Any]] = [
+        {"type": "input_text", "text": current_message["content"]}
+    ]
+    current_content.extend(
+        {"type": "input_image", "image_url": image_url}
+        for image_url in image_urls
+    )
+    return [
+        *request_history[:-1],
+        {"role": "user", "content": current_content},
+    ]
+
+
 async def is_reply_to_lumi(message: discord.Message) -> bool:
     if client.user is None or message.reference is None:
         return False
@@ -828,11 +909,20 @@ async def on_message(message: discord.Message) -> None:
     if not is_dm and not is_mention and not await is_reply_to_lumi(message):
         return
 
+    image_urls = supported_image_urls(
+        getattr(message, "attachments", []) or []
+    )
     user_text = re.sub(
         rf"<@!?{re.escape(str(client.user.id))}>", "", message.content
     ).strip()
     if not user_text:
-        user_text = "The user mentioned you without adding any text."
+        if image_urls:
+            user_text = (
+                "The user shared an image without accompanying text. "
+                "Inspect it and respond naturally."
+            )
+        else:
+            user_text = "The user mentioned you without adding any text."
 
     scope_context = memory_access_context(message)
     history_key = conversation_key_for(message)
@@ -842,6 +932,7 @@ async def on_message(message: discord.Message) -> None:
         request_history = (
             history + [{"role": "user", "content": user_text}]
         )[-MAX_HISTORY_MESSAGES:]
+        openai_input = build_openai_input(request_history, image_urls)
 
         try:
             async with message.channel.typing():
@@ -854,12 +945,19 @@ async def on_message(message: discord.Message) -> None:
                     model=MODEL,
                     reasoning={"effort": "none"},
                     instructions=lumi_instructions_with_memory(memory_context),
-                    input=request_history,
+                    input=openai_input,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
                 )
         except OpenAIError:
+            error_message = (
+                "I couldn't access that image just now. Could you try "
+                "sending it again or describing it?"
+                if image_urls
+                else "I'm having trouble reaching OpenAI right now. "
+                "Try me again in a moment."
+            )
             await message.reply(
-                "I'm having trouble reaching OpenAI right now. Try me again in a moment.",
+                error_message,
                 mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -867,8 +965,15 @@ async def on_message(message: discord.Message) -> None:
 
         answer = response.output_text.strip()
         if not answer:
+            error_message = (
+                "I couldn't access that image just now. Could you try "
+                "sending it again or describing it?"
+                if image_urls
+                else "My thoughts got tangled for a second. "
+                "Would you send that again?"
+            )
             await message.reply(
-                "My thoughts got tangled for a second. Would you send that again?",
+                error_message,
                 mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )

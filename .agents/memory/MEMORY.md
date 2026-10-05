@@ -1,1 +1,1 @@
-- [Lumi Discord bot constraints](lumi-discord-bot.md) — Preserve behavior and isolate scoped memories/history by Discord user and server; never expose secrets.
+- [Lumi Discord bot constraints](lumi-discord-bot.md) — Preserve behavior, isolate scoped memories/history, and keep image URLs/data transient; never expose secrets.
