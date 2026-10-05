@@ -1466,10 +1466,20 @@ async def on_message(message: discord.Message) -> None:
                         + recalled_context
                     ),
                     input=openai_input,
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
                     tools=(
                         [IMAGE_TOOL]
-                        if IMAGE_GENERATION_ENABLED and not bot_author
+                        if (
+                            IMAGE_GENERATION_ENABLED
+                            and not bot_author
+                            and re.search(
+                                r"\b(?:draw|illustrate|paint|render)\b"
+                                r"|\b(?:make|create|generate|edit)\b"
+                                r".{0,80}\b(?:image|picture|portrait|"
+                                r"drawing|illustration|photo)\b",
+                                raw_user_text,
+                                re.IGNORECASE,
+                            )
+                        )
                         else []
                     ),
                     parallel_tool_calls=False,
